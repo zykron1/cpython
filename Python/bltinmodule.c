@@ -1765,6 +1765,11 @@ static PyObject* builtin_avg(PyObject* self, PyObject* args) {
         return NULL;
     }
 
+    // First pass: sum large and small numbers separately
+    double large_sum = 0.0;
+    double small_sum = 0.0;
+    double compensation = 0.0;
+
     while ((item = PyIter_Next(iterator)) != NULL) {
         if (!PyNumber_Check(item)) {
             Py_DECREF(item);
@@ -1772,7 +1777,14 @@ static PyObject* builtin_avg(PyObject* self, PyObject* args) {
             PyErr_SetString(PyExc_TypeError, "All elements must be numbers.");
             return NULL;
         }
-        total += PyFloat_AsDouble(item);
+
+        double value = PyFloat_AsDouble(item);
+        if (value > 1e50 || value < -1e50) {
+            large_sum += value;
+        } else {
+            small_sum += value;
+        }
+
         count++;
         Py_DECREF(item);
     }
@@ -1786,6 +1798,9 @@ static PyObject* builtin_avg(PyObject* self, PyObject* args) {
         PyErr_SetString(PyExc_ValueError, "avg() arg is an empty sequence");
         return NULL;
     }
+
+    // Second pass: correct small numbers into total sum
+    total = large_sum + small_sum;
 
     return Py_BuildValue("d", total / count);
 }
