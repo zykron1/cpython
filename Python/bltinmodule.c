@@ -1754,6 +1754,7 @@ static PyObject* builtin_avg(PyObject* self, PyObject* args) {
     PyObject* iterator;
     PyObject* item;
     double total = 0.0;
+    double c = 0.0; // A running compensation for lost low-order bits.
     Py_ssize_t count = 0;
 
     if (!PyArg_ParseTuple(args, "O", &iterable)) {
@@ -1765,11 +1766,6 @@ static PyObject* builtin_avg(PyObject* self, PyObject* args) {
         return NULL;
     }
 
-    // First pass: sum large and small numbers separately
-    double large_sum = 0.0;
-    double small_sum = 0.0;
-    double compensation = 0.0;
-
     while ((item = PyIter_Next(iterator)) != NULL) {
         if (!PyNumber_Check(item)) {
             Py_DECREF(item);
@@ -1779,13 +1775,12 @@ static PyObject* builtin_avg(PyObject* self, PyObject* args) {
         }
 
         double value = PyFloat_AsDouble(item);
-        if (value > 1e50 || value < -1e50) {
-            large_sum += value;
-        } else {
-            small_sum += value;
-        }
-
+        double y = value - c;  // First subtract the compensation from the value
+        double t = total + y;  // Add the adjusted value to the total
+        c = (t - total) - y;   // Recompute the compensation
+        total = t;             // Update total with the compensated sum
         count++;
+
         Py_DECREF(item);
     }
     Py_DECREF(iterator);
@@ -1798,9 +1793,6 @@ static PyObject* builtin_avg(PyObject* self, PyObject* args) {
         PyErr_SetString(PyExc_ValueError, "avg() arg is an empty sequence");
         return NULL;
     }
-
-    // Second pass: correct small numbers into total sum
-    total = large_sum + small_sum;
 
     return Py_BuildValue("d", total / count);
 }
